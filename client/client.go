@@ -24,8 +24,6 @@ type Monitor struct {
 	IsCurved     bool
 }
 
-// var monitors = make(map[string]Monitor)
-
 func AddDisplay() Display {
 	var display Display
 	fmt.Println("Введите диагональ: ")
@@ -52,23 +50,6 @@ func AddMonitor() Monitor {
 	fmt.Println("Монитор успешно добавлен")
 	return monitor
 }
-
-// func ViewAllMonitors() {
-// 	fmt.Println("Список мониторов: ")
-// 	for name, monitor := range monitors {
-// 		fmt.Printf("Монитор: %s \n", name)
-// 		fmt.Printf("Напряжение питания: %v \n", monitor.PowerColtage)
-// 		fmt.Printf("Дисплей: \n")
-// 		fmt.Println("---------------------------")
-// 		// fmt.Printf("Название дисплея: ", monitor.Display.DName)
-// 		fmt.Printf("Диагональ: %.2f дюймов\n", monitor.Display.Diagonal)
-// 		fmt.Printf("Разрешение экрана: %s \n", monitor.Display.Resolution)
-// 		fmt.Printf("Тип: %s \n", monitor.Display.Type)
-// 		fmt.Printf("Поддержка G-Sync: %v \n", monitor.Display.GSync)
-// 		fmt.Printf("Поддержка G-Sync Premium: %v \n", monitor.GSyncPremium)
-// 		fmt.Printf("Изогнутый: %v \n", monitor.IsCurved)
-// 	}
-// }
 
 func main() {
 
@@ -97,7 +78,6 @@ func main() {
 				log.Fatal(err)
 			}
 			req, _ := http.NewRequest("POST", "http://127.0.0.1:8080/addDisplay", bytes.NewReader(newj))
-			// req.Header.Add("Key", newdispl.DName)
 			response, err := client.Do(req)
 			if err != nil {
 				log.Fatal("[CLIENT] ERROR", err)
@@ -111,7 +91,6 @@ func main() {
 				log.Fatal(err)
 			}
 			req, _ := http.NewRequest("POST", "http://127.0.0.1:8080/addMonitor", bytes.NewReader(newj))
-			// req.Header.Add("Key", newmonitor.MName)
 			response, err := client.Do(req)
 			if err != nil {
 				log.Fatal("[CLIENT] ERROR", err)
@@ -119,7 +98,6 @@ func main() {
 			defer response.Body.Close()
 
 		case 3:
-			// ViewAllMonitors()
 
 			req, _ := http.NewRequest("GET", "http://127.0.0.1:8080/allMonitors", nil)
 			response, err := client.Do(req)

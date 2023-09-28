@@ -82,7 +82,6 @@ func addDisplayHandler(w http.ResponseWriter, r *http.Request) { //обрабо�
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 	}
-	// displayInfoMap[tempDisplay.ID] = tempDisplay
 
 	db, err := sql.Open("postgres", connStr)
 	if err != nil {
@@ -101,7 +100,6 @@ func addDisplayHandler(w http.ResponseWriter, r *http.Request) { //обрабо�
 func removeDisplayHandler(w http.ResponseWriter, r *http.Request) { //Функция возвращают информацию о всех дисплеях в формате текста, который будет отправлен клиенту в ответ на HTTP-запрос.
 	body, _ := io.ReadAll(r.Body)
 	displayId := string(body)
-	// delete(displayInfoMap, displayId)
 
 	db, err := sql.Open("postgres", connStr)
 	if err != nil {
@@ -172,7 +170,6 @@ func allDisplaysHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func allMonitorsHandler(w http.ResponseWriter, r *http.Request) {
-	//for _, monitor := range monitorInfoMap {
 
 	db, err := sql.Open("postgres", connStr)
 	if err != nil {
