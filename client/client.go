@@ -24,6 +24,18 @@ type Monitor struct {
 	IsCurved     bool
 }
 
+type User struct {
+	ID_User       int    `json:"id"`
+	Username_User string `json:"username"`
+	Password_User string `json:"password"`
+	Email_User    string `json:"email"`
+	Is_Admin_User bool   `json:"isadmin"`
+}
+type LoginStruct struct {
+	User_Login    string `json:"login"`
+	User_Password string `json:"password"`
+}
+
 func AddDisplay() Display {
 	var display Display
 	fmt.Println("Введите диагональ: ")
@@ -51,10 +63,55 @@ func AddMonitor() Monitor {
 	return monitor
 }
 
+func AddUser() User {
+	var user User
+	fmt.Println("Введите username: ")
+	fmt.Scanln(&user.Username_User)
+	fmt.Println("Введите password: ")
+	fmt.Scanln(&user.Password_User)
+	fmt.Println("Введите email: ")
+	fmt.Scanln(&user.Email_User)
+	fmt.Println("Является пользователь админом? (true/false): ")
+	fmt.Scanln(&user.Is_Admin_User)
+	return user
+}
+
+// var username_user string
+// var password_user string
+var TOKEN string = ""
+
 func main() {
 
 	client := &http.Client{}
 
+	for TOKEN == "" {
+		var loginForm LoginStruct
+
+		fmt.Println("Введите логин")
+		fmt.Scanln(&loginForm.User_Login)
+		fmt.Println("Введите пароль")
+		fmt.Scanln(&loginForm.User_Password)
+
+		usr_data, err := json.Marshal(loginForm)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		req, _ := http.NewRequest("POST", "http://127.0.0.1:8080/login", bytes.NewReader(usr_data))
+		response, err := client.Do(req)
+		if err != nil {
+			log.Fatal("[CLIENT] ERROR", err)
+		}
+		defer response.Body.Close()
+		out, err := io.ReadAll(response.Body)
+		if err != nil {
+			log.Fatal(err)
+		}
+		TOKEN = string(out)
+
+		log.Println(string(out))
+
+	}
 	for {
 		fmt.Println("Выберите действие: ")
 		fmt.Println("1) Добавить дисплей")
@@ -64,7 +121,8 @@ func main() {
 		fmt.Println("5) Удалить монитор")
 		fmt.Println("6) Удалить дисплей")
 		fmt.Println("7) Посмотреть монитор по ID")
-		fmt.Println("8) Выйти")
+		fmt.Println("8) Регистрация")
+		fmt.Println("9) Выйти")
 
 		var choice int
 		fmt.Scanln(&choice)
@@ -161,6 +219,24 @@ func main() {
 			}
 			log.Println(string(out))
 		case 8:
+			newUser := AddUser()
+			newu, err := json.Marshal(newUser)
+			if err != nil {
+				log.Fatal(err)
+			}
+			req, _ := http.NewRequest("POST", "http://127.0.0.1:8080/addUser", bytes.NewReader(newu))
+			response, err := client.Do(req)
+			if err != nil {
+				log.Fatal("[CLIENT] ERROR", err)
+			}
+			defer response.Body.Close()
+
+			out, err := io.ReadAll(response.Body)
+			if err != nil {
+				log.Fatal(err)
+			}
+			log.Println(string(out))
+		case 9:
 			fmt.Println("Программа завершена")
 			return
 		default:

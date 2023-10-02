@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
 	"fmt" //Пакет для форматированного вывода на консоль.
@@ -28,7 +29,21 @@ type MonitorInfo struct { //Структура
 	IsCurved     bool        `json:"isCurved"`
 }
 
-var connStr = "user=postgres password=Waldronnezz1 dbname=shop sslmode=disable"
+type User struct {
+	ID_User       int    `json:"id"`
+	Username_User string `json:"username"`
+	Password_User string `json:"password"`
+	Email_User    string `json:"email"`
+	Is_Admin_User bool   `json:"isadmin"`
+}
+
+type LoginStruct struct {
+	User_Login    string `json:"login"`
+	User_Password string `json:"password"`
+}
+
+var connStr = "user=postgres password=admin12345 dbname=shop sslmode=disable"
+var tokens = make(map[string]User)
 
 func main() { // запускает веб-сервер, который слушает на порту 8080
 
@@ -45,11 +60,42 @@ func startServer() {
 	http.HandleFunc("/allDisplays", allDisplaysHandler)     //обрабатывают запросы для получения информации о всех дисплеях.
 	http.HandleFunc("/allMonitors", allMonitorsHandler)     //обрабатывают запросы для получения информации о всех мониторах.
 	http.HandleFunc("/getMonitor", getMonitorHandler)
+	http.HandleFunc("/addUser", addUserHandler)
+	http.HandleFunc("/login", loginUser)
 	err := http.ListenAndServe(":8080", nil)
 	if err != nil {
 		panic(err)
 	}
 
+}
+
+func loginUser(w http.ResponseWriter, r *http.Request) { //Функция возвращают информацию о всех дисплеях в формате текста, который будет отправлен клиенту в ответ на HTTP-запрос.
+	tempLogin := LoginStruct{}
+	body, _ := io.ReadAll(r.Body)
+	err := json.Unmarshal(body, &tempLogin)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+	}
+
+	db, err := sql.Open("postgres", connStr)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
+
+	password := db.QueryRow("select Password_User from Users where Username_User = $1", tempLogin.User_Login)
+	var tempPass string
+	password.Scan(&tempPass)
+	defer db.Close()
+	loginPass := sha256.Sum256([]byte(tempLogin.User_Password))
+	for fmt.Sprintf("%x", loginPass) == tempPass {
+		userHashToken := sha256.Sum224([]byte(tempLogin.User_Login + fmt.Sprintf("%x", loginPass)))
+		w.Write([]byte(userHashToken[:]))
+		tokens[string(userHashToken[:])] = 
+		return
+	}
+
+	w.Write([]byte("Неверный пароль или логин!"))
 }
 
 func addMonitorHandler(w http.ResponseWriter, r *http.Request) { //обработчик HTTP-запросов получает данные из запроса, а затем вносит изменения в соответствующие мапы (displayInfoMap или monitorInfoMap)
@@ -95,6 +141,28 @@ func addDisplayHandler(w http.ResponseWriter, r *http.Request) { //обрабо�
 	}
 	fmt.Println(result.RowsAffected())
 	w.Write([]byte("Новый Дисплей добавлен."))
+}
+
+func addUserHandler(w http.ResponseWriter, r *http.Request) { //обработчик HTTP-запросов получает данные из запроса, а затем вносит изменения в соответствующие мапы (displayInfoMap или monitorInfoMap)
+	tempUser := User{}
+	body, _ := io.ReadAll(r.Body)
+	err := json.Unmarshal(body, &tempUser)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+	}
+
+	db, err := sql.Open("postgres", connStr)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
+	userpasswordhash := sha256.Sum256([]byte(tempUser.Password_User))
+	result, err := db.Exec("insert into Users (Username_User, Password_User, Email_User, Is_Admin_User) values ($1, $2, $3, $4)", tempUser.Username_User, fmt.Sprintf("%x", userpasswordhash[:]), tempUser.Email_User, tempUser.Is_Admin_User)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(result.RowsAffected())
+	w.Write([]byte("Пользователь зарегестрирован."))
 }
 
 func removeDisplayHandler(w http.ResponseWriter, r *http.Request) { //Функция возвращают информацию о всех дисплеях в формате текста, который будет отправлен клиенту в ответ на HTTP-запрос.
