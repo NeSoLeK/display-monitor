@@ -69,6 +69,15 @@ func startServer() {
 
 }
 
+func checkLogin(token string) bool {
+	_, ok := tokens[token]
+	// If the key exists
+	if ok {
+		return true
+	}
+	return false
+}
+
 func loginUser(w http.ResponseWriter, r *http.Request) { //Функция возвращают информацию о всех дисплеях в формате текста, который будет отправлен клиенту в ответ на HTTP-запрос.
 	tempLogin := LoginStruct{}
 	body, _ := io.ReadAll(r.Body)
@@ -83,64 +92,72 @@ func loginUser(w http.ResponseWriter, r *http.Request) { //Функция воз
 	}
 	defer db.Close()
 
-	password := db.QueryRow("select Password_User from Users where Username_User = $1", tempLogin.User_Login)
-	var tempPass string
-	password.Scan(&tempPass)
+	data := db.QueryRow("select * from Users where Username_User = $1", tempLogin.User_Login)
+	var tempData User
+	data.Scan(&tempData.ID_User, &tempData.Username_User, &tempData.Password_User, &tempData.Email_User, &tempData.Is_Admin_User)
 	defer db.Close()
 	loginPass := sha256.Sum256([]byte(tempLogin.User_Password))
-	for fmt.Sprintf("%x", loginPass) == tempPass {
-		userHashToken := sha256.Sum224([]byte(tempLogin.User_Login + fmt.Sprintf("%x", loginPass)))
+	for fmt.Sprintf("%x", loginPass) == tempData.Password_User {
+		userHashToken := sha256.Sum224([]byte(tempLogin.User_Login + fmt.Sprintf("%x", loginPass) + string(tempData.ID_User)))
+		tokens[fmt.Sprintf("%x", userHashToken[:])] = tempData
 		w.Write([]byte(userHashToken[:]))
-		tokens[string(userHashToken[:])] = 
 		return
 	}
-
-	w.Write([]byte("Неверный пароль или логин!"))
 }
 
 func addMonitorHandler(w http.ResponseWriter, r *http.Request) { //обработчик HTTP-запросов получает данные из запроса, а затем вносит изменения в соответствующие мапы (displayInfoMap или monitorInfoMap)
-	tempMonitor := MonitorInfo{}
-	body, _ := io.ReadAll(r.Body)
-	err := json.Unmarshal(body, &tempMonitor)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-	}
+	tempToken := r.Header.Get("Authorization")
+	if checkLogin(tempToken) && tokens[tempToken].Is_Admin_User == true {
+		tempMonitor := MonitorInfo{}
+		body, _ := io.ReadAll(r.Body)
+		err := json.Unmarshal(body, &tempMonitor)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+		}
 
-	db, err := sql.Open("postgres", connStr)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer db.Close()
+		db, err := sql.Open("postgres", connStr)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer db.Close()
 
-	result, err := db.Exec("insert into Monitors (Display_ID, Monitor_Gsync_Premium, Monitor_Curved) values ($1, $2, $3)", tempMonitor.DisplayID, tempMonitor.GSyncPremium, tempMonitor.IsCurved)
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Println(result.RowsAffected())
+		result, err := db.Exec("insert into Monitors (Display_ID, Monitor_Gsync_Premium, Monitor_Curved) values ($1, $2, $3)", tempMonitor.DisplayID, tempMonitor.GSyncPremium, tempMonitor.IsCurved)
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Println(result.RowsAffected())
 
-	w.Write([]byte("Новый Монитор добавлен."))
+		w.Write([]byte("Новый Монитор добавлен."))
+		return
+	}
+	w.Write([]byte("Для добавления нужно обладать правами администратора!"))
 }
 
 func addDisplayHandler(w http.ResponseWriter, r *http.Request) { //обработчик HTTP-запросов получает данные из запроса, а затем вносит изменения в соответствующие мапы (displayInfoMap или monitorInfoMap)
-	tempDisplay := DisplayInfo{}
-	body, _ := io.ReadAll(r.Body)
-	err := json.Unmarshal(body, &tempDisplay)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-	}
+	tempToken := r.Header.Get("Authorization")
+	if checkLogin(tempToken) && tokens[tempToken].Is_Admin_User == true {
+		tempDisplay := DisplayInfo{}
+		body, _ := io.ReadAll(r.Body)
+		err := json.Unmarshal(body, &tempDisplay)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+		}
 
-	db, err := sql.Open("postgres", connStr)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer db.Close()
+		db, err := sql.Open("postgres", connStr)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer db.Close()
 
-	result, err := db.Exec("insert into Displays (Display_Diagonal, Display_Resolution, Display_Type, Display_Gsync) values ($1, $2, $3, $4)", tempDisplay.Diagonal, tempDisplay.Resolution, tempDisplay.Type, tempDisplay.GSync)
-	if err != nil {
-		log.Fatal(err)
+		result, err := db.Exec("insert into Displays (Display_Diagonal, Display_Resolution, Display_Type, Display_Gsync) values ($1, $2, $3, $4)", tempDisplay.Diagonal, tempDisplay.Resolution, tempDisplay.Type, tempDisplay.GSync)
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Println(result.RowsAffected())
+		w.Write([]byte("Новый Дисплей добавлен."))
+		return
 	}
-	fmt.Println(result.RowsAffected())
-	w.Write([]byte("Новый Дисплей добавлен."))
+	w.Write([]byte("Для добавления нужно обладать правами администратора!"))
 }
 
 func addUserHandler(w http.ResponseWriter, r *http.Request) { //обработчик HTTP-запросов получает данные из запроса, а затем вносит изменения в соответствующие мапы (displayInfoMap или monitorInfoMap)
@@ -166,128 +183,153 @@ func addUserHandler(w http.ResponseWriter, r *http.Request) { //обработч
 }
 
 func removeDisplayHandler(w http.ResponseWriter, r *http.Request) { //Функция возвращают информацию о всех дисплеях в формате текста, который будет отправлен клиенту в ответ на HTTP-запрос.
-	body, _ := io.ReadAll(r.Body)
-	displayId := string(body)
+	tempToken := r.Header.Get("Authorization")
+	if checkLogin(tempToken) && tokens[tempToken].Is_Admin_User == true {
+		body, _ := io.ReadAll(r.Body)
+		displayId := string(body)
 
-	db, err := sql.Open("postgres", connStr)
-	if err != nil {
-		log.Fatal(err)
+		db, err := sql.Open("postgres", connStr)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer db.Close()
+
+		result, err := db.Exec("delete from Displays where ID_Display = $1", displayId)
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Println(result.RowsAffected())
+
+		w.Write([]byte("Вы удалили дисплей."))
+		return
 	}
-	defer db.Close()
-
-	result, err := db.Exec("delete from Displays where ID_Display = $1", displayId)
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Println(result.RowsAffected())
-
-	w.Write([]byte("Вы удалили дисплей."))
+	w.Write([]byte("Для удаления нужно обладать правами администратора!"))
 }
 
 func removeMonitorHandler(w http.ResponseWriter, r *http.Request) { //Функция возвращают информацию о всех мониторах в формате текста, который будет отправлен клиенту в ответ на HTTP-запрос.
-	body, _ := io.ReadAll(r.Body)
-	monitorId := string(body)
+	tempToken := r.Header.Get("Authorization")
+	if checkLogin(tempToken) && tokens[tempToken].Is_Admin_User == true {
 
-	db, err := sql.Open("postgres", connStr)
-	if err != nil {
-		log.Fatal(err)
+		body, _ := io.ReadAll(r.Body)
+		monitorId := string(body)
+
+		db, err := sql.Open("postgres", connStr)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer db.Close()
+
+		result, err := db.Exec("delete from Monitors where ID_Monitor = $1", monitorId)
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Println(result.RowsAffected())
+
+		w.Write([]byte("Вы удалили монитор."))
+		return
 	}
-	defer db.Close()
 
-	result, err := db.Exec("delete from Monitors where ID_Monitor = $1", monitorId)
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Println(result.RowsAffected())
+	w.Write([]byte("Для удаления нужно обладать правами администратора!"))
 
-	w.Write([]byte("Вы удалили монитор."))
 }
 
 func allDisplaysHandler(w http.ResponseWriter, r *http.Request) {
-
-	db, err := sql.Open("postgres", connStr)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer db.Close()
-
-	rows, err := db.Query("select * from Displays")
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer rows.Close()
-
-	products := []DisplayInfo{}
-
-	for rows.Next() {
-		p := DisplayInfo{}
-		err := rows.Scan(&p.ID_Display, &p.Diagonal, &p.Resolution, &p.Type, &p.GSync)
+	tempToken := r.Header.Get("Authorization")
+	if checkLogin(tempToken) {
+		db, err := sql.Open("postgres", connStr)
 		if err != nil {
-			fmt.Println(err)
-			continue
+			log.Fatal(err)
 		}
-		products = append(products, p)
-	}
+		defer db.Close()
 
-	for _, p := range products {
-		fmt.Println(p.ID_Display, p.Diagonal, p.Resolution, p.Type, p.GSync)
+		rows, err := db.Query("select * from Displays")
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer rows.Close()
+
+		products := []DisplayInfo{}
+
+		for rows.Next() {
+			p := DisplayInfo{}
+			err := rows.Scan(&p.ID_Display, &p.Diagonal, &p.Resolution, &p.Type, &p.GSync)
+			if err != nil {
+				fmt.Println(err)
+				continue
+			}
+			products = append(products, p)
+		}
+		out, _ := json.Marshal(products)
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(out)
+		return
 	}
-	out, _ := json.Marshal(products)
-	w.Header().Set("Content-Type", "application/json")
-	w.Write(out)
+	w.Write([]byte("Для просмотра нужно быть авторизованным!"))
+
 }
 
 func allMonitorsHandler(w http.ResponseWriter, r *http.Request) {
-
-	db, err := sql.Open("postgres", connStr)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer db.Close()
-
-	rows, err := db.Query("select * from Monitors")
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer rows.Close()
-
-	products := []MonitorInfo{}
-
-	for rows.Next() {
-		p := MonitorInfo{}
-		err := rows.Scan(&p.ID_Monitor, &p.Display.ID_Display, &p.GSyncPremium, &p.IsCurved)
+	tempToken := r.Header.Get("Authorization")
+	if checkLogin(tempToken) {
+		db, err := sql.Open("postgres", connStr)
 		if err != nil {
-			fmt.Println(err)
-			continue
+			log.Fatal(err)
 		}
-		products = append(products, p)
+		defer db.Close()
+
+		rows, err := db.Query("select * from Monitors")
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer rows.Close()
+
+		products := []MonitorInfo{}
+
+		for rows.Next() {
+			p := MonitorInfo{}
+			err := rows.Scan(&p.ID_Monitor, &p.Display.ID_Display, &p.GSyncPremium, &p.IsCurved)
+			if err != nil {
+				fmt.Println(err)
+				continue
+			}
+			products = append(products, p)
+		}
+
+		out, _ := json.Marshal(products)
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(out)
+		return
 	}
+	w.Write([]byte("Для просмотра нужно быть авторизованным!"))
 
-	out, _ := json.Marshal(products)
-
-	w.Header().Set("Content-Type", "application/json")
-	w.Write(out)
 }
 
 func getMonitorHandler(w http.ResponseWriter, r *http.Request) {
-	body, _ := io.ReadAll(r.Body)
-	monitorID := string(body)
+	tempToken := r.Header.Get("Authorization")
+	if checkLogin(tempToken) {
+		body, _ := io.ReadAll(r.Body)
+		monitorID := string(body)
 
-	db, err := sql.Open("postgres", connStr)
-	if err != nil {
-		log.Fatal(err)
+		db, err := sql.Open("postgres", connStr)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer db.Close()
+		var tempMonitor MonitorInfo
+		monitor := db.QueryRow("select * from Monitors where ID_Monitor = $1", monitorID)
+		monitor.Scan(&tempMonitor.ID_Monitor, &tempMonitor.DisplayID, &tempMonitor.GSyncPremium, &tempMonitor.IsCurved)
+		defer db.Close()
+
+		out, err := json.Marshal(tempMonitor)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(out)
+		return
 	}
-	defer db.Close()
-	var tempMonitor MonitorInfo
-	monitor := db.QueryRow("select * from Monitors where ID_Monitor = $1", monitorID)
-	monitor.Scan(&tempMonitor.ID_Monitor, &tempMonitor.DisplayID, &tempMonitor.GSyncPremium, &tempMonitor.IsCurved)
-	defer db.Close()
+	w.Write([]byte("Для просмотра нужно быть авторизованным!"))
 
-	out, err := json.Marshal(tempMonitor)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.Write(out)
 }

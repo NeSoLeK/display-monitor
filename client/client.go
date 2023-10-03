@@ -59,7 +59,6 @@ func AddMonitor() Monitor {
 	fmt.Scanln(&monitor.GSyncPremium)
 	fmt.Println("Является ли монитор изогнутым: ")
 	fmt.Scanln(&monitor.IsCurved)
-	fmt.Println("Монитор успешно добавлен")
 	return monitor
 }
 
@@ -136,12 +135,17 @@ func main() {
 				log.Fatal(err)
 			}
 			req, _ := http.NewRequest("POST", "http://127.0.0.1:8080/addDisplay", bytes.NewReader(newj))
+			req.Header.Add("Authorization", fmt.Sprintf("%x", TOKEN))
 			response, err := client.Do(req)
 			if err != nil {
 				log.Fatal("[CLIENT] ERROR", err)
 			}
 			defer response.Body.Close()
-
+			out, err := io.ReadAll(response.Body)
+			if err != nil {
+				log.Fatal(err)
+			}
+			log.Println(string(out))
 		case 2:
 			newmonitor := AddMonitor()
 			newj, err := json.Marshal(newmonitor)
@@ -149,15 +153,22 @@ func main() {
 				log.Fatal(err)
 			}
 			req, _ := http.NewRequest("POST", "http://127.0.0.1:8080/addMonitor", bytes.NewReader(newj))
+			req.Header.Add("Authorization", fmt.Sprintf("%x", TOKEN))
 			response, err := client.Do(req)
 			if err != nil {
 				log.Fatal("[CLIENT] ERROR", err)
 			}
 			defer response.Body.Close()
+			out, err := io.ReadAll(response.Body)
+			if err != nil {
+				log.Fatal(err)
+			}
+			log.Println(string(out))
 
 		case 3:
 
 			req, _ := http.NewRequest("GET", "http://127.0.0.1:8080/allMonitors", nil)
+			req.Header.Add("Authorization", fmt.Sprintf("%x", TOKEN))
 			response, err := client.Do(req)
 			if err != nil {
 				log.Fatal("[CLIENT] ERROR", err)
@@ -172,6 +183,7 @@ func main() {
 
 		case 4:
 			req, _ := http.NewRequest("GET", "http://127.0.0.1:8080/allDisplays", nil)
+			req.Header.Add("Authorization", fmt.Sprintf("%x", TOKEN))
 			response, err := client.Do(req)
 			if err != nil {
 				log.Fatal("[CLIENT] ERROR", err)
@@ -188,26 +200,39 @@ func main() {
 			fmt.Println("Введите название монитора для удаления: ")
 			fmt.Scanln(&delword)
 			req, _ := http.NewRequest("POST", "http://127.0.0.1:8080/removeMonitor", bytes.NewReader([]byte(delword)))
+			req.Header.Add("Authorization", fmt.Sprintf("%x", TOKEN))
 			response, err := client.Do(req)
 			if err != nil {
 				log.Fatal("[CLIENT] ERROR", err)
 			}
 			defer response.Body.Close()
+			out, err := io.ReadAll(response.Body)
+			if err != nil {
+				log.Fatal(err)
+			}
+			log.Println(string(out))
 		case 6:
 			var delword string
 			fmt.Println("Введите ID дисплея для удаления: ")
 			fmt.Scanln(&delword)
 			req, _ := http.NewRequest("POST", "http://127.0.0.1:8080/removeDisplay", bytes.NewReader([]byte(delword)))
+			req.Header.Add("Authorization", fmt.Sprintf("%x", TOKEN))
 			response, err := client.Do(req)
 			if err != nil {
 				log.Fatal("[CLIENT] ERROR", err)
 			}
 			defer response.Body.Close()
+			out, err := io.ReadAll(response.Body)
+			if err != nil {
+				log.Fatal(err)
+			}
+			log.Println(string(out))
 		case 7:
 			var searchWord string
 			fmt.Println("Введите ID дисплея для поиска: ")
 			fmt.Scanln(&searchWord)
 			req, _ := http.NewRequest("POST", "http://127.0.0.1:8080/getMonitor", bytes.NewReader([]byte(searchWord)))
+			req.Header.Add("Authorization", fmt.Sprintf("%x", TOKEN))
 			response, err := client.Do(req)
 			if err != nil {
 				log.Fatal("[CLIENT] ERROR", err)
@@ -225,6 +250,7 @@ func main() {
 				log.Fatal(err)
 			}
 			req, _ := http.NewRequest("POST", "http://127.0.0.1:8080/addUser", bytes.NewReader(newu))
+			req.Header.Add("Authorization", fmt.Sprintf("%x", TOKEN))
 			response, err := client.Do(req)
 			if err != nil {
 				log.Fatal("[CLIENT] ERROR", err)
