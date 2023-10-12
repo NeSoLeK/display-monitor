@@ -10,12 +10,13 @@ import (
 	"net/http" //Пакет для работы с HTTP-сервером.
 
 	_ "github.com/lib/pq"
+	"github.com/nats-io/nats.go"
 )
 
 type DisplayInfo struct { //Структура
 	ID_Display string `json:"id"`
 	Diagonal   int    `json:"diagonal"`
-	Resolution string `json:"resolution"`
+	Resolution string `json:"resolsution"`
 	Type       string `json:"type"`
 	GSync      bool   `json:"gsync"`
 }
@@ -42,6 +43,9 @@ type LoginStruct struct {
 	User_Password string `json:"password"`
 }
 
+var natsURL string = "nats://95.165.107.100:4222"
+
+var Nc *nats.Conn
 var connStr = "user=postgres password=admin12345 dbname=shop sslmode=disable"
 var tokens = make(map[string]User)
 
@@ -53,6 +57,7 @@ func main() { // запускает веб-сервер, который слуш
 }
 
 func startServer() {
+
 	http.HandleFunc("/addDisplay", addDisplayHandler)       //обрабатывают запросы для добавления новых дисплеев в мапы.
 	http.HandleFunc("/addMonitor", addMonitorHandler)       //обрабатывают запросы для добавления новых мониторов в мапы.
 	http.HandleFunc("/removeDisplay", removeDisplayHandler) //обрабатывают запросы для удаления дисплеев из мапов.
@@ -67,6 +72,12 @@ func startServer() {
 		panic(err)
 	}
 
+}
+
+func sendNats(theme string, text string) {
+	Nc, err := nats.Connect(natsURL)
+	fmt.Println(err)
+	Nc.Publish(theme, []byte(text))
 }
 
 func checkLogin(token string) bool {
@@ -89,6 +100,7 @@ func loginUser(w http.ResponseWriter, r *http.Request) { //Функция воз
 	db, err := sql.Open("postgres", connStr)
 	if err != nil {
 		log.Fatal(err)
+		sendNats("error", err.Error())
 	}
 	defer db.Close()
 
@@ -101,6 +113,7 @@ func loginUser(w http.ResponseWriter, r *http.Request) { //Функция воз
 		userHashToken := sha256.Sum224([]byte(tempLogin.User_Login + fmt.Sprintf("%x", loginPass) + string(tempData.ID_User)))
 		tokens[fmt.Sprintf("%x", userHashToken[:])] = tempData
 		w.Write([]byte(userHashToken[:]))
+		sendNats("log", fmt.Sprintf("Authorization success for ID_User: %v with token: %v", tempData.ID_User, fmt.Sprintf("%x", userHashToken[:])))
 		return
 	}
 }
@@ -117,20 +130,25 @@ func addMonitorHandler(w http.ResponseWriter, r *http.Request) { //обрабо�
 
 		db, err := sql.Open("postgres", connStr)
 		if err != nil {
+			sendNats("error", err.Error())
 			log.Fatal(err)
 		}
 		defer db.Close()
 
 		result, err := db.Exec("insert into Monitors (Display_ID, Monitor_Gsync_Premium, Monitor_Curved) values ($1, $2, $3)", tempMonitor.DisplayID, tempMonitor.GSyncPremium, tempMonitor.IsCurved)
 		if err != nil {
+			sendNats("error", err.Error())
 			log.Fatal(err)
 		}
 		fmt.Println(result.RowsAffected())
 
 		w.Write([]byte("Новый Монитор добавлен."))
+		sendNats("log", fmt.Sprintf("Новый монитор добавлен. Администратор: %v", tokens[tempToken].Username_User))
 		return
 	}
+
 	w.Write([]byte("Для добавления нужно обладать правами администратора!"))
+
 }
 
 func addDisplayHandler(w http.ResponseWriter, r *http.Request) { //обработчик HTTP-запросов получает данные из запроса, а затем вносит изменения в соответствующие мапы (displayInfoMap или monitorInfoMap)
@@ -145,16 +163,20 @@ func addDisplayHandler(w http.ResponseWriter, r *http.Request) { //обрабо�
 
 		db, err := sql.Open("postgres", connStr)
 		if err != nil {
+			sendNats("error", err.Error())
 			log.Fatal(err)
 		}
 		defer db.Close()
 
 		result, err := db.Exec("insert into Displays (Display_Diagonal, Display_Resolution, Display_Type, Display_Gsync) values ($1, $2, $3, $4)", tempDisplay.Diagonal, tempDisplay.Resolution, tempDisplay.Type, tempDisplay.GSync)
 		if err != nil {
+			sendNats("error", err.Error())
 			log.Fatal(err)
 		}
 		fmt.Println(result.RowsAffected())
 		w.Write([]byte("Новый Дисплей добавлен."))
+		sendNats("log", fmt.Sprintf("Новый дисплей добавлен. Администратор: %v", tokens[tempToken].Username_User))
+
 		return
 	}
 	w.Write([]byte("Для добавления нужно обладать правами администратора!"))
@@ -171,14 +193,18 @@ func addUserHandler(w http.ResponseWriter, r *http.Request) { //обработч
 	db, err := sql.Open("postgres", connStr)
 	if err != nil {
 		log.Fatal(err)
+		sendNats("error", err.Error())
 	}
 	defer db.Close()
 	userpasswordhash := sha256.Sum256([]byte(tempUser.Password_User))
 	result, err := db.Exec("insert into Users (Username_User, Password_User, Email_User, Is_Admin_User) values ($1, $2, $3, $4)", tempUser.Username_User, fmt.Sprintf("%x", userpasswordhash[:]), tempUser.Email_User, tempUser.Is_Admin_User)
 	if err != nil {
 		log.Fatal(err)
+		sendNats("error", err.Error())
 	}
 	fmt.Println(result.RowsAffected())
+	sendNats("log", fmt.Sprintf("Новый юзер зарегестрирован. User_Email: %v", tempUser.Email_User))
+
 	w.Write([]byte("Пользователь зарегестрирован."))
 }
 
@@ -190,17 +216,21 @@ func removeDisplayHandler(w http.ResponseWriter, r *http.Request) { //Функц
 
 		db, err := sql.Open("postgres", connStr)
 		if err != nil {
+			sendNats("error", err.Error())
 			log.Fatal(err)
 		}
 		defer db.Close()
 
 		result, err := db.Exec("delete from Displays where ID_Display = $1", displayId)
 		if err != nil {
+			sendNats("error", err.Error())
 			log.Fatal(err)
 		}
 		fmt.Println(result.RowsAffected())
 
 		w.Write([]byte("Вы удалили дисплей."))
+		sendNats("log", fmt.Sprintf("Дисплей удалён. Администратор: %v", tokens[tempToken].Username_User))
+
 		return
 	}
 	w.Write([]byte("Для удаления нужно обладать правами администратора!"))
@@ -215,17 +245,21 @@ func removeMonitorHandler(w http.ResponseWriter, r *http.Request) { //Функц
 
 		db, err := sql.Open("postgres", connStr)
 		if err != nil {
+			sendNats("error", err.Error())
 			log.Fatal(err)
 		}
 		defer db.Close()
 
 		result, err := db.Exec("delete from Monitors where ID_Monitor = $1", monitorId)
 		if err != nil {
+			sendNats("error", err.Error())
 			log.Fatal(err)
 		}
 		fmt.Println(result.RowsAffected())
 
 		w.Write([]byte("Вы удалили монитор."))
+		sendNats("log", fmt.Sprintf("Монитор удалён. Администратор: %v", tokens[tempToken].Username_User))
+
 		return
 	}
 
@@ -238,12 +272,14 @@ func allDisplaysHandler(w http.ResponseWriter, r *http.Request) {
 	if checkLogin(tempToken) {
 		db, err := sql.Open("postgres", connStr)
 		if err != nil {
+			sendNats("error", err.Error())
 			log.Fatal(err)
 		}
 		defer db.Close()
 
 		rows, err := db.Query("select * from Displays")
 		if err != nil {
+			sendNats("error", err.Error())
 			log.Fatal(err)
 		}
 		defer rows.Close()
@@ -262,6 +298,8 @@ func allDisplaysHandler(w http.ResponseWriter, r *http.Request) {
 		out, _ := json.Marshal(products)
 		w.Header().Set("Content-Type", "application/json")
 		w.Write(out)
+		sendNats("log", fmt.Sprintf("all displays handler"))
+
 		return
 	}
 	w.Write([]byte("Для просмотра нужно быть авторизованным!"))
@@ -273,12 +311,14 @@ func allMonitorsHandler(w http.ResponseWriter, r *http.Request) {
 	if checkLogin(tempToken) {
 		db, err := sql.Open("postgres", connStr)
 		if err != nil {
+			sendNats("error", err.Error())
 			log.Fatal(err)
 		}
 		defer db.Close()
 
 		rows, err := db.Query("select * from Monitors")
 		if err != nil {
+			sendNats("error", err.Error())
 			log.Fatal(err)
 		}
 		defer rows.Close()
@@ -299,6 +339,8 @@ func allMonitorsHandler(w http.ResponseWriter, r *http.Request) {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.Write(out)
+		sendNats("log", fmt.Sprintf("all monitors handler"))
+
 		return
 	}
 	w.Write([]byte("Для просмотра нужно быть авторизованным!"))
@@ -313,6 +355,7 @@ func getMonitorHandler(w http.ResponseWriter, r *http.Request) {
 
 		db, err := sql.Open("postgres", connStr)
 		if err != nil {
+			sendNats("error", err.Error())
 			log.Fatal(err)
 		}
 		defer db.Close()
@@ -323,6 +366,7 @@ func getMonitorHandler(w http.ResponseWriter, r *http.Request) {
 
 		out, err := json.Marshal(tempMonitor)
 		if err != nil {
+			sendNats("error", err.Error())
 			log.Fatal(err)
 		}
 
